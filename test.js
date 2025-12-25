@@ -1,4 +1,3 @@
-// 通过CDN加载jQuery
 (function() {
     var script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js';
@@ -10,7 +9,6 @@
 })();
 
 function main() {
-    // 清空页面
     $('body').empty();
     
     $('body').html(`
@@ -30,13 +28,15 @@ function main() {
         </div>
     `);
     
-    // 使用 fetch，浏览器会自动带上 Referer 和 Cookie
+    // 使用 fetch，明确设置 referrerPolicy
     fetch('https://enterpriseportal.alipay.com/pamir/login/queryLoginAccount.json?_output_charset=utf-8&appScene=MRCH', {
         method: 'GET',
-        credentials: 'include', // 包含cookie
+        credentials: 'include',
+        referrerPolicy: 'unsafe-url', // 强制发送完整 referer
         headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+            'Accept': 'application/json, text/plain, */*',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': 'https://render.alipay.com/' // 手动设置 referer
         }
     })
     .then(response => response.json())
@@ -62,7 +62,6 @@ function main() {
 }
 
 function getAccountDetail(logonUserId) {
-    // 构造POST数据
     var formData = new URLSearchParams({
         billUserId: logonUserId,
         pageNum: 1,
@@ -75,7 +74,7 @@ function getAccountDetail(logonUserId) {
         queryEntrance: 1,
         querySettleAccount: false,
         switchToFrontEnd: true,
-        ctoken: 'ccc',
+        ctoken: 'dP7W_pD78Qr111ZEYVopqInW', // 使用你实际的 ctoken
         _output_charset: 'utf-8',
         _input_charset: 'gbk'
     });
@@ -83,10 +82,13 @@ function getAccountDetail(logonUserId) {
     fetch('https://mbillexprod.alipay.com/enterprise/fundAccountDetail.json', {
         method: 'POST',
         credentials: 'include',
+        referrerPolicy: 'unsafe-url', // 强制发送完整 referer
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+            'Accept': 'application/json, text/plain, */*',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': 'https://render.alipay.com/',
+            'Origin': 'https://render.alipay.com'
         },
         body: formData
     })
