@@ -10,7 +10,7 @@
     iframe.style.borderRadius = '8px';
     
     // 先设置 src 为同域的页面
-    iframe.src = 'https://b.alipay.com/robots.txt';
+    iframe.src = 'https://auth.alipay.com/login/index.htm';
     
     document.body.appendChild(iframe);
     
