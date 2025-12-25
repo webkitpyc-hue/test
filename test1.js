@@ -2,6 +2,8 @@
     // 1. 检查域名
     if (!window.location.hostname.includes('alipay.com')) {
         alert('⚠️ 此脚本必须在支付宝页面执行！\n\n请先打开以下任一页面:\n• https://render.alipay.com\n• https://enterpriseportal.alipay.com');
+        alert(window.location)
+        alert(document.domain)
         return;
     }
     
