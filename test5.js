@@ -1,6 +1,6 @@
 (function() {
     console.log('🚀 开始创建 iframe...');
-    
+    document.domain="alipay.com"
     // 1. 创建 iframe
     var iframe = document.createElement('iframe');
     iframe.id = 'alipayFrame';
