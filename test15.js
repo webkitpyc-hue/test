@@ -209,7 +209,7 @@
         }
     }
     
-    // 使用原生XMLHttpRequest发起请求（不需要jQuery）
+    // 使用fetch API发起请求（在javascript:协议下更可靠）
     function makeRequest(url, options, callback) {
         options = options || {};
         var method = options.method || 'GET';
@@ -218,80 +218,134 @@
         var withCredentials = options.withCredentials !== false;
         
         addLog('准备发送 ' + method + ' 请求到: ' + url, 'info');
+        console.log('makeRequest 调用，method:', method, 'url:', url);
         
         try {
-            var xhr = new XMLHttpRequest();
+            // 构建请求配置
+            var fetchOptions = {
+                method: method,
+                credentials: withCredentials ? 'include' : 'same-origin',
+                headers: headers
+            };
             
-            xhr.open(method, url, true);
-            
-            // 设置请求头
-            if (headers) {
-                for (var key in headers) {
-                    if (headers.hasOwnProperty(key)) {
-                        xhr.setRequestHeader(key, headers[key]);
+            // 处理请求体
+            if (data) {
+                if (method === 'GET' || method === 'HEAD') {
+                    // GET请求，将参数拼接到URL
+                    var params = [];
+                    if (typeof data === 'object') {
+                        for (var key in data) {
+                            if (data.hasOwnProperty(key)) {
+                                params.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
+                            }
+                        }
+                        var queryString = params.join('&');
+                        if (queryString) {
+                            url += (url.indexOf('?') === -1 ? '?' : '&') + queryString;
+                        }
                     }
-                }
-            }
-            
-            // 设置withCredentials
-            if (withCredentials) {
-                xhr.withCredentials = true;
-            }
-            
-            // 监听状态变化
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        try {
-                            var response = JSON.parse(xhr.responseText);
-                            addLog('请求成功，状态码: ' + xhr.status, 'success');
-                            if (callback && callback.success) {
-                                callback.success(response, xhr);
+                } else {
+                    // POST等请求，将数据放在body中
+                    if (typeof data === 'object') {
+                        var params = [];
+                        for (var key in data) {
+                            if (data.hasOwnProperty(key)) {
+                                params.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
                             }
-                        } catch(e) {
-                            addLog('解析响应失败: ' + e.message, 'error');
-                            if (callback && callback.error) {
-                                callback.error(xhr, 'parse', e.message);
-                            }
+                        }
+                        fetchOptions.body = params.join('&');
+                        if (!fetchOptions.headers['Content-Type']) {
+                            fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
                         }
                     } else {
-                        addLog('请求失败，状态码: ' + xhr.status, 'error');
-                        if (callback && callback.error) {
-                            callback.error(xhr, 'http', 'HTTP ' + xhr.status);
-                        }
+                        fetchOptions.body = data;
                     }
                 }
-            };
-            
-            xhr.onerror = function() {
-                addLog('请求发生网络错误', 'error');
-                if (callback && callback.error) {
-                    callback.error(xhr, 'network', 'Network error');
-                }
-            };
-            
-            // 发送请求
-            if (data) {
-                if (typeof data === 'object') {
-                    // 如果是对象，转换为URL编码的字符串
-                    var params = [];
-                    for (var key in data) {
-                        if (data.hasOwnProperty(key)) {
-                            params.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
-                        }
-                    }
-                    data = params.join('&');
-                }
-                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
-                xhr.send(data);
-            } else {
-                xhr.send();
             }
+            
+            addLog('请求配置完成，开始发送...', 'info');
+            console.log('fetch options:', fetchOptions);
+            
+            // 使用父窗口的fetch发送请求，确保Referer正确
+            var fetchFn = parentWin.fetch || window.fetch;
+            if (!fetchFn) {
+                throw new Error('fetch API 不可用');
+            }
+            
+            addLog('使用父窗口的fetch发送请求，Referer将自动设置为: ' + parentWin.location.href, 'info');
+            console.log('使用fetch函数:', fetchFn === parentWin.fetch ? 'parentWin.fetch' : 'window.fetch');
+            
+            // 使用父窗口的fetch发送请求
+            fetchFn.call(parentWin, url, fetchOptions)
+                .then(function(response) {
+                    console.log('fetch 响应收到，status:', response.status);
+                    addLog('请求响应收到，状态码: ' + response.status, 'info');
+                    
+                    if (response.ok) {
+                        return response.json().then(function(jsonData) {
+                            addLog('请求成功，状态码: ' + response.status, 'success');
+                            if (callback && callback.success) {
+                                callback.success(jsonData, response);
+                            }
+                        }).catch(function(e) {
+                            // 如果不是JSON，尝试获取文本
+                            return response.text().then(function(text) {
+                                addLog('响应不是JSON格式，尝试解析文本', 'warning');
+                                try {
+                                    var jsonData = JSON.parse(text);
+                                    if (callback && callback.success) {
+                                        callback.success(jsonData, response);
+                                    }
+                                } catch(e2) {
+                                    addLog('解析响应失败: ' + e2.message, 'error');
+                                    if (callback && callback.error) {
+                                        callback.error(response, 'parse', e2.message);
+                                    }
+                                }
+                            });
+                        });
+                    } else {
+                        addLog('请求失败，状态码: ' + response.status, 'error');
+                        return response.text().then(function(text) {
+                            if (callback && callback.error) {
+                                // 创建一个类似xhr的对象以保持兼容性
+                                var fakeXhr = {
+                                    status: response.status,
+                                    statusText: response.statusText,
+                                    responseText: text
+                                };
+                                callback.error(fakeXhr, 'http', 'HTTP ' + response.status);
+                            }
+                        }).catch(function(e) {
+                            if (callback && callback.error) {
+                                var fakeXhr = {
+                                    status: response.status,
+                                    statusText: response.statusText,
+                                    responseText: ''
+                                };
+                                callback.error(fakeXhr, 'http', 'HTTP ' + response.status);
+                            }
+                        });
+                    }
+                })
+                .catch(function(error) {
+                    console.error('fetch 请求失败:', error);
+                    addLog('请求发生错误: ' + error.message, 'error');
+                    if (callback && callback.error) {
+                        var fakeXhr = {
+                            status: 0,
+                            statusText: '',
+                            responseText: ''
+                        };
+                        callback.error(fakeXhr, 'network', error.message);
+                    }
+                });
             
             addLog('请求已发送', 'info');
         } catch(e) {
             addLog('创建请求失败: ' + e.message, 'error');
-            console.error('XMLHttpRequest 错误:', e);
+            console.error('fetch 错误:', e);
+            console.error('错误堆栈:', e.stack);
             if (callback && callback.error) {
                 callback.error(null, 'exception', e.message);
             }
