@@ -389,17 +389,31 @@
             }
             
                 addLog('⏳ 准备执行主流程（使用原生XMLHttpRequest）...', 'info');
+                console.log('准备执行主流程，检查main函数是否存在:', typeof main);
                 
                 // 直接执行主流程，不需要jQuery
-                setTimeout(function() {
-                    try {
-                        addLog('⏳ 开始执行主流程...', 'info');
-                        main();
-                    } catch(e) {
-                        addLog('❌ main() 执行失败: ' + e.message, 'error');
-                        console.error('main() 错误:', e);
-                    }
-                }, 500);
+                // 先立即尝试执行一次
+                try {
+                    console.log('立即尝试执行main()...');
+                    addLog('⏳ 开始执行主流程...', 'info');
+                    main();
+                    console.log('main() 执行完成（无异常）');
+                } catch(e) {
+                    console.error('立即执行main()失败:', e);
+                    console.error('错误堆栈:', e.stack);
+                    addLog('❌ main() 执行失败: ' + e.message, 'error');
+                    // 如果立即执行失败，延迟再试
+                    setTimeout(function() {
+                        try {
+                            console.log('延迟执行main()...');
+                            addLog('⏳ 延迟执行主流程...', 'info');
+                            main();
+                        } catch(e2) {
+                            console.error('延迟执行main()也失败:', e2);
+                            addLog('❌ 延迟执行main()也失败: ' + e2.message, 'error');
+                        }
+                    }, 500);
+                }
             } catch(e) {
                 console.error('executeNextStep 内部错误:', e);
                 console.error('错误堆栈:', e.stack);
@@ -467,86 +481,104 @@
     
     // 主函数
     function main() {
-        addLog('开始执行主流程', 'info');
-        addLog('步骤1: 准备请求用户信息...', 'info');
-        
-        // 获取用户信息
-        var userInfoUrl = 'https://enterpriseportal.alipay.com/pamir/login/queryLoginAccount.json';
-        
-        addLog('请求URL: ' + userInfoUrl, 'info');
-        addLog('Referer将自动设置为父窗口URL: ' + parentWin.location.href, 'info');
-        
+        console.log('main() 函数开始执行');
         try {
-            var userInfoEl = parentDoc.getElementById('userInfo');
-            if (userInfoEl) userInfoEl.innerHTML = '<div class="step-indicator">📡 正在请求用户信息...</div>';
-        } catch(e) {}
-        
-        // 使用原生XMLHttpRequest发送请求
-        makeRequest(userInfoUrl, {
-            method: 'GET',
-            data: {
-                _output_charset: 'utf-8',
-                appScene: 'MRCH'
-            },
-            withCredentials: true
-        }, {
-            success: function(data) {
-                addLog('用户信息获取成功', 'success');
-                addLog('响应数据: ' + JSON.stringify(data), 'info');
-                
-                try {
-                    var logonUserId = data.logonUserId;
-                    var logonName = data.logonName;
-                    
-                    addLog('解析用户ID: ' + logonUserId, 'success');
-                    addLog('解析用户名: ' + logonName, 'success');
+            addLog('开始执行主流程', 'info');
+            addLog('步骤1: 准备请求用户信息...', 'info');
+            
+            // 获取用户信息
+            var userInfoUrl = 'https://enterpriseportal.alipay.com/pamir/login/queryLoginAccount.json';
+            
+            console.log('准备请求:', userInfoUrl);
+            addLog('请求URL: ' + userInfoUrl, 'info');
+            
+            try {
+                var parentLocation = parentWin.location.href;
+                addLog('Referer将自动设置为父窗口URL: ' + parentLocation, 'info');
+            } catch(e) {
+                console.warn('无法获取parentWin.location:', e);
+                addLog('⚠️ 无法获取父窗口URL: ' + e.message, 'warning');
+            }
+            
+            try {
+                var userInfoEl = parentDoc.getElementById('userInfo');
+                if (userInfoEl) userInfoEl.innerHTML = '<div class="step-indicator">📡 正在请求用户信息...</div>';
+            } catch(e) {
+                console.warn('更新userInfo元素失败:', e);
+            }
+            
+            // 使用原生XMLHttpRequest发送请求
+            makeRequest(userInfoUrl, {
+                method: 'GET',
+                data: {
+                    _output_charset: 'utf-8',
+                    appScene: 'MRCH'
+                },
+                withCredentials: true
+            }, {
+                success: function(data) {
+                    addLog('用户信息获取成功', 'success');
+                    addLog('响应数据: ' + JSON.stringify(data), 'info');
                     
                     try {
-                        var userInfoEl = parentDoc.getElementById('userInfo');
-                        if (userInfoEl) {
-                            userInfoEl.className = 'info-box user';
-                            userInfoEl.innerHTML = '<div class="step-indicator">✅ 用户信息获取成功</div>' +
-                                '<p><strong>用户ID:</strong> <code>' + logonUserId + '</code></p>' +
-                                '<p><strong>用户名:</strong> ' + logonName + '</p>';
-                        }
-                    } catch(e) {}
+                        var logonUserId = data.logonUserId;
+                        var logonName = data.logonName;
+                        
+                        addLog('解析用户ID: ' + logonUserId, 'success');
+                        addLog('解析用户名: ' + logonName, 'success');
+                        
+                        try {
+                            var userInfoEl = parentDoc.getElementById('userInfo');
+                            if (userInfoEl) {
+                                userInfoEl.className = 'info-box user';
+                                userInfoEl.innerHTML = '<div class="step-indicator">✅ 用户信息获取成功</div>' +
+                                    '<p><strong>用户ID:</strong> <code>' + logonUserId + '</code></p>' +
+                                    '<p><strong>用户名:</strong> ' + logonName + '</p>';
+                            }
+                        } catch(e) {}
+                        
+                        // 获取账户详情
+                        setTimeout(function() {
+                            getAccountDetail(logonUserId);
+                        }, 500);
+                    } catch(e) {
+                        addLog('解析用户信息失败: ' + e.message, 'error');
+                        try {
+                            var userInfoEl = parentDoc.getElementById('userInfo');
+                            if (userInfoEl) {
+                                userInfoEl.className = 'info-box error';
+                                userInfoEl.innerHTML = '<p><strong>❌ 解析失败:</strong> ' + e.message + '</p>';
+                            }
+                        } catch(e2) {}
+                    }
+                },
+                error: function(xhr, status, error) {
+                    addLog('获取用户信息失败', 'error');
+                    addLog('错误信息: ' + error, 'error');
+                    addLog('状态码: ' + (xhr ? xhr.status : 'N/A'), 'error');
+                    addLog('响应内容: ' + (xhr && xhr.responseText ? xhr.responseText.substring(0, 200) : 'N/A'), 'error');
                     
-                    // 获取账户详情
-                    setTimeout(function() {
-                        getAccountDetail(logonUserId);
-                    }, 500);
-                } catch(e) {
-                    addLog('解析用户信息失败: ' + e.message, 'error');
                     try {
                         var userInfoEl = parentDoc.getElementById('userInfo');
                         if (userInfoEl) {
                             userInfoEl.className = 'info-box error';
-                            userInfoEl.innerHTML = '<p><strong>❌ 解析失败:</strong> ' + e.message + '</p>';
+                            userInfoEl.innerHTML = '<div class="step-indicator">❌ 获取失败</div>' +
+                                '<p><strong>错误:</strong> ' + error + '</p>' +
+                                '<p><strong>状态码:</strong> ' + (xhr ? xhr.status : 'N/A') + '</p>' +
+                                '<p style="font-size: 12px;">可能原因: 未登录、Cookie过期、或CORS限制</p>';
                         }
-                    } catch(e2) {}
+                    } catch(e) {}
                 }
-            },
-            error: function(xhr, status, error) {
-                addLog('获取用户信息失败', 'error');
-                addLog('错误信息: ' + error, 'error');
-                addLog('状态码: ' + (xhr ? xhr.status : 'N/A'), 'error');
-                addLog('响应内容: ' + (xhr && xhr.responseText ? xhr.responseText.substring(0, 200) : 'N/A'), 'error');
-                
-                try {
-                    var userInfoEl = parentDoc.getElementById('userInfo');
-                    if (userInfoEl) {
-                        userInfoEl.className = 'info-box error';
-                        userInfoEl.innerHTML = '<div class="step-indicator">❌ 获取失败</div>' +
-                            '<p><strong>错误:</strong> ' + error + '</p>' +
-                            '<p><strong>状态码:</strong> ' + (xhr ? xhr.status : 'N/A') + '</p>' +
-                            '<p style="font-size: 12px;">可能原因: 未登录、Cookie过期、或CORS限制</p>';
-                    }
-                } catch(e) {}
-            }
-        });
+            });
+        } catch(e) {
+            console.error('main() 函数内部错误:', e);
+            console.error('错误堆栈:', e.stack);
+            addLog('❌ main() 函数内部错误: ' + e.message, 'error');
+        }
     }
     
     function getAccountDetail(logonUserId) {
+        console.log('getAccountDetail() 开始执行, logonUserId:', logonUserId);
         addLog('步骤2: 准备请求账户详情...', 'info');
         
         // 从Cookie中获取ctoken
