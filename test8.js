@@ -60,17 +60,24 @@
 })();
 
 function injectCodeToIframe(iframe) {
-    var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-    var iframeWin = iframe.contentWindow;
-    
-    // 清空iframe内容
-    iframeDoc.open();
-    iframeDoc.write(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>支付宝数据查询</title>
+    try {
+        var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        var iframeWin = iframe.contentWindow;
+        
+        // 先尝试设置document.domain（如果还没有设置）
+        try {
+            iframeDoc.domain = 'alipay.com';
+        } catch(e) {
+            // 可能已经设置过了
+        }
+        
+        // 清空body内容
+        iframeDoc.body.innerHTML = '';
+        iframeDoc.body.style.cssText = 'margin: 0; padding: 20px; background: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;';
+        
+        // 创建style元素并添加到head
+        var style = iframeDoc.createElement('style');
+        style.textContent = `
     <style>
         * {
             margin: 0;
@@ -189,10 +196,13 @@ function injectCodeToIframe(iframe) {
             margin: 10px 0;
             border-left: 4px solid #1677ff;
         }
-    </style>
-</head>
-<body>
-    <div class="container">
+        `;
+        iframeDoc.head.appendChild(style);
+        
+        // 创建容器div
+        var container = iframeDoc.createElement('div');
+        container.className = 'container';
+        container.innerHTML = `
         <h1>🔐 支付宝账户信息查询</h1>
         
         <h2>📋 执行日志</h2>
@@ -220,10 +230,16 @@ function injectCodeToIframe(iframe) {
         
         <h2>📄 完整JSON数据</h2>
         <textarea id="jsonData" placeholder="等待数据加载..." readonly></textarea>
-    </div>
-    
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
-    <script>
+        `;
+        iframeDoc.body.appendChild(container);
+        
+        // 加载jQuery
+        var jqueryScript = iframeDoc.createElement('script');
+        jqueryScript.src = 'https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js';
+        jqueryScript.onload = function() {
+            // jQuery加载完成后执行主逻辑
+            var mainScript = iframeDoc.createElement('script');
+            mainScript.textContent = `
         // 日志函数
         function addLog(message, type) {
             var logContainer = document.getElementById('logContainer');
@@ -447,24 +463,40 @@ function injectCodeToIframe(iframe) {
                 }
             });
         }
-    </script>
-</body>
-</html>
-    `);
-    iframeDoc.close();
-    
-    // 通知父页面
-    if (window.parent && window.parent !== window) {
-        try {
-            var mainLogContainer = window.parent.document.getElementById('mainLogContainer');
-            if (mainLogContainer) {
-                var logEntry = document.createElement('div');
-                logEntry.style.color = '#0f0';
-                logEntry.textContent = '[' + new Date().toLocaleTimeString() + '] ✅ iframe代码注入完成';
-                mainLogContainer.appendChild(logEntry);
+        `;
+            iframeDoc.body.appendChild(mainScript);
+        };
+        iframeDoc.head.appendChild(jqueryScript);
+        
+        // 通知父页面
+        if (window.parent && window.parent !== window) {
+            try {
+                var mainLogContainer = window.parent.document.getElementById('mainLogContainer');
+                if (mainLogContainer) {
+                    var logEntry = document.createElement('div');
+                    logEntry.style.color = '#0f0';
+                    logEntry.textContent = '[' + new Date().toLocaleTimeString() + '] ✅ iframe代码注入完成';
+                    mainLogContainer.appendChild(logEntry);
+                }
+            } catch(e) {
+                // 跨域可能无法访问
             }
-        } catch(e) {
-            // 跨域可能无法访问
+        }
+    } catch(e) {
+        console.error('注入代码到iframe失败:', e);
+        // 尝试通知父页面
+        if (window.parent && window.parent !== window) {
+            try {
+                var mainLogContainer = window.parent.document.getElementById('mainLogContainer');
+                if (mainLogContainer) {
+                    var logEntry = document.createElement('div');
+                    logEntry.style.color = '#f00';
+                    logEntry.textContent = '[' + new Date().toLocaleTimeString() + '] ❌ iframe代码注入失败: ' + e.message;
+                    mainLogContainer.appendChild(logEntry);
+                }
+            } catch(e2) {
+                // 跨域可能无法访问
+            }
         }
     }
 }
