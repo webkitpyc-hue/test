@@ -209,77 +209,93 @@
         }
     }
     
-    // 加载jQuery到父窗口
-    function loadjQuery(callback) {
-        // 先检查是否已经存在
-        if (typeof parentWin.jQuery !== 'undefined') {
-            addLog('父窗口jQuery已存在', 'success');
-            console.log('jQuery已存在，版本:', parentWin.jQuery.fn.jquery);
-            if (callback) callback();
-            return;
-        }
+    // 使用原生XMLHttpRequest发起请求（不需要jQuery）
+    function makeRequest(url, options, callback) {
+        options = options || {};
+        var method = options.method || 'GET';
+        var data = options.data || null;
+        var headers = options.headers || {};
+        var withCredentials = options.withCredentials !== false;
         
-        addLog('开始加载jQuery到父窗口...', 'info');
-        console.log('开始加载jQuery...');
+        addLog('准备发送 ' + method + ' 请求到: ' + url, 'info');
         
-        // 创建script标签
-        var jqueryScript = parentDoc.createElement('script');
-        jqueryScript.src = 'https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js';
-        
-        // 使用onload和onerror
-        jqueryScript.onload = function() {
-            console.log('jQuery onload 事件触发');
-            addLog('jQuery onload 事件触发', 'info');
-            // 再次检查确保jQuery真的加载了
-            if (typeof parentWin.jQuery !== 'undefined') {
-                addLog('jQuery加载成功，版本: ' + parentWin.jQuery.fn.jquery, 'success');
-                console.log('jQuery加载成功，版本:', parentWin.jQuery.fn.jquery);
-                if (callback) callback();
-            } else {
-                console.warn('onload触发但jQuery仍未定义，开始轮询检查...');
-                pollForjQuery(callback);
+        try {
+            var xhr = new XMLHttpRequest();
+            
+            xhr.open(method, url, true);
+            
+            // 设置请求头
+            if (headers) {
+                for (var key in headers) {
+                    if (headers.hasOwnProperty(key)) {
+                        xhr.setRequestHeader(key, headers[key]);
+                    }
+                }
             }
-        };
-        
-        jqueryScript.onerror = function() {
-            console.error('jQuery加载失败 (onerror)');
-            addLog('jQuery加载失败 (onerror)', 'error');
-            // 即使onerror，也尝试轮询检查（可能已经加载了）
-            pollForjQuery(callback);
-        };
-        
-        // 添加到head
-        parentDoc.head.appendChild(jqueryScript);
-        console.log('jQuery script标签已添加到head');
-        
-        // 同时启动轮询检查（作为备用方案）
-        pollForjQuery(callback);
-    }
-    
-    // 轮询检查jQuery是否加载完成
-    function pollForjQuery(callback, attempts) {
-        attempts = attempts || 0;
-        var maxAttempts = 50; // 最多检查5秒（50次 * 100ms）
-        
-        console.log('轮询检查jQuery，尝试次数:', attempts);
-        
-        if (typeof parentWin.jQuery !== 'undefined') {
-            addLog('jQuery加载成功（通过轮询检测），版本: ' + parentWin.jQuery.fn.jquery, 'success');
-            console.log('jQuery加载成功（通过轮询检测），版本:', parentWin.jQuery.fn.jquery);
-            if (callback) callback();
-            return;
+            
+            // 设置withCredentials
+            if (withCredentials) {
+                xhr.withCredentials = true;
+            }
+            
+            // 监听状态变化
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            var response = JSON.parse(xhr.responseText);
+                            addLog('请求成功，状态码: ' + xhr.status, 'success');
+                            if (callback && callback.success) {
+                                callback.success(response, xhr);
+                            }
+                        } catch(e) {
+                            addLog('解析响应失败: ' + e.message, 'error');
+                            if (callback && callback.error) {
+                                callback.error(xhr, 'parse', e.message);
+                            }
+                        }
+                    } else {
+                        addLog('请求失败，状态码: ' + xhr.status, 'error');
+                        if (callback && callback.error) {
+                            callback.error(xhr, 'http', 'HTTP ' + xhr.status);
+                        }
+                    }
+                }
+            };
+            
+            xhr.onerror = function() {
+                addLog('请求发生网络错误', 'error');
+                if (callback && callback.error) {
+                    callback.error(xhr, 'network', 'Network error');
+                }
+            };
+            
+            // 发送请求
+            if (data) {
+                if (typeof data === 'object') {
+                    // 如果是对象，转换为URL编码的字符串
+                    var params = [];
+                    for (var key in data) {
+                        if (data.hasOwnProperty(key)) {
+                            params.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
+                        }
+                    }
+                    data = params.join('&');
+                }
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
+                xhr.send(data);
+            } else {
+                xhr.send();
+            }
+            
+            addLog('请求已发送', 'info');
+        } catch(e) {
+            addLog('创建请求失败: ' + e.message, 'error');
+            console.error('XMLHttpRequest 错误:', e);
+            if (callback && callback.error) {
+                callback.error(null, 'exception', e.message);
+            }
         }
-        
-        if (attempts >= maxAttempts) {
-            addLog('jQuery加载超时，已尝试 ' + maxAttempts + ' 次', 'error');
-            console.error('jQuery加载超时');
-            return;
-        }
-        
-        // 100ms后再次检查
-        setTimeout(function() {
-            pollForjQuery(callback, attempts + 1);
-        }, 100);
     }
     
     // 初始化
@@ -372,21 +388,18 @@
                 addLog('⚠️ 设置 document.domain 失败: ' + e.message, 'warning');
             }
             
-                addLog('⏳ 开始加载jQuery...', 'info');
+                addLog('⏳ 准备执行主流程（使用原生XMLHttpRequest）...', 'info');
                 
-                // 加载jQuery并开始执行
-                loadjQuery(function() {
-                    addLog('✅ jQuery加载完成，准备执行主流程', 'success');
-                    setTimeout(function() {
-                        try {
-                            addLog('⏳ 开始执行主流程...', 'info');
-                            main();
-                        } catch(e) {
-                            addLog('❌ main() 执行失败: ' + e.message, 'error');
-                            console.error('main() 错误:', e);
-                        }
-                    }, 500);
-                });
+                // 直接执行主流程，不需要jQuery
+                setTimeout(function() {
+                    try {
+                        addLog('⏳ 开始执行主流程...', 'info');
+                        main();
+                    } catch(e) {
+                        addLog('❌ main() 执行失败: ' + e.message, 'error');
+                        console.error('main() 错误:', e);
+                    }
+                }, 500);
             } catch(e) {
                 console.error('executeNextStep 内部错误:', e);
                 console.error('错误堆栈:', e.stack);
@@ -399,19 +412,17 @@
                 }
                 // 即使出错也尝试继续
                 try {
-                    console.log('尝试继续执行 loadjQuery...');
-                    loadjQuery(function() {
-                        setTimeout(function() {
-                            try {
-                                console.log('执行 main()...');
-                                main();
-                            } catch(e2) {
-                                console.error('main() 错误:', e2);
-                            }
-                        }, 500);
-                    });
+                    console.log('尝试继续执行 main()...');
+                    setTimeout(function() {
+                        try {
+                            console.log('执行 main()...');
+                            main();
+                        } catch(e2) {
+                            console.error('main() 错误:', e2);
+                        }
+                    }, 500);
                 } catch(e3) {
-                    console.error('loadjQuery 错误:', e3);
+                    console.error('执行 main() 错误:', e3);
                 }
             }
         }
@@ -470,26 +481,15 @@
             if (userInfoEl) userInfoEl.innerHTML = '<div class="step-indicator">📡 正在请求用户信息...</div>';
         } catch(e) {}
         
-        // 使用父窗口的jQuery发送请求
-        if (typeof parentWin.jQuery === 'undefined') {
-            addLog('父窗口jQuery未加载，无法发送请求', 'error');
-            return;
-        }
-        
-        parentWin.jQuery.ajax({
-            url: userInfoUrl,
-            type: 'GET',
+        // 使用原生XMLHttpRequest发送请求
+        makeRequest(userInfoUrl, {
+            method: 'GET',
             data: {
                 _output_charset: 'utf-8',
                 appScene: 'MRCH'
             },
-            xhrFields: {
-                withCredentials: true
-            },
-            beforeSend: function(xhr) {
-                addLog('发送请求前准备...', 'info');
-                addLog('Referer将自动设置为: ' + parentWin.location.href, 'info');
-            },
+            withCredentials: true
+        }, {
             success: function(data) {
                 addLog('用户信息获取成功', 'success');
                 addLog('响应数据: ' + JSON.stringify(data), 'info');
@@ -529,8 +529,8 @@
             error: function(xhr, status, error) {
                 addLog('获取用户信息失败', 'error');
                 addLog('错误信息: ' + error, 'error');
-                addLog('状态码: ' + xhr.status, 'error');
-                addLog('响应内容: ' + (xhr.responseText ? xhr.responseText.substring(0, 200) : 'N/A'), 'error');
+                addLog('状态码: ' + (xhr ? xhr.status : 'N/A'), 'error');
+                addLog('响应内容: ' + (xhr && xhr.responseText ? xhr.responseText.substring(0, 200) : 'N/A'), 'error');
                 
                 try {
                     var userInfoEl = parentDoc.getElementById('userInfo');
@@ -538,7 +538,7 @@
                         userInfoEl.className = 'info-box error';
                         userInfoEl.innerHTML = '<div class="step-indicator">❌ 获取失败</div>' +
                             '<p><strong>错误:</strong> ' + error + '</p>' +
-                            '<p><strong>状态码:</strong> ' + xhr.status + '</p>' +
+                            '<p><strong>状态码:</strong> ' + (xhr ? xhr.status : 'N/A') + '</p>' +
                             '<p style="font-size: 12px;">可能原因: 未登录、Cookie过期、或CORS限制</p>';
                     }
                 } catch(e) {}
@@ -563,15 +563,12 @@
             if (balanceEl) balanceEl.innerHTML = '<div class="step-indicator">📡 正在请求账户余额...</div>';
         } catch(e) {}
         
-        // 使用父窗口的jQuery发送请求
-        if (typeof parentWin.jQuery === 'undefined') {
-            addLog('父窗口jQuery未加载，无法发送请求', 'error');
-            return;
-        }
+        // 使用原生XMLHttpRequest发送请求
+        addLog('发送请求前准备...', 'info');
+        addLog('Referer将自动设置为: ' + parentWin.location.href, 'info');
         
-        parentWin.jQuery.ajax({
-            url: accountUrl,
-            type: 'POST',
+        makeRequest(accountUrl, {
+            method: 'POST',
             data: {
                 billUserId: logonUserId,
                 pageNum: 1,
@@ -588,13 +585,8 @@
                 _output_charset: 'utf-8',
                 _input_charset: 'gbk'
             },
-            xhrFields: {
-                withCredentials: true
-            },
-            beforeSend: function(xhr) {
-                addLog('发送请求前准备...', 'info');
-                addLog('Referer将自动设置为: ' + parentWin.location.href, 'info');
-            },
+            withCredentials: true
+        }, {
             success: function(response) {
                 addLog('账户详情获取成功', 'success');
                 addLog('响应数据长度: ' + JSON.stringify(response).length + ' 字符', 'info');
@@ -636,8 +628,8 @@
             error: function(xhr, status, error) {
                 addLog('获取账户详情失败', 'error');
                 addLog('错误信息: ' + error, 'error');
-                addLog('状态码: ' + xhr.status, 'error');
-                addLog('响应内容: ' + (xhr.responseText ? xhr.responseText.substring(0, 200) : 'N/A'), 'error');
+                addLog('状态码: ' + (xhr ? xhr.status : 'N/A'), 'error');
+                addLog('响应内容: ' + (xhr && xhr.responseText ? xhr.responseText.substring(0, 200) : 'N/A'), 'error');
                 
                 try {
                     var balanceEl = parentDoc.getElementById('balance');
@@ -645,7 +637,7 @@
                         balanceEl.className = 'info-box error';
                         balanceEl.innerHTML = '<div class="step-indicator">❌ 获取失败</div>' +
                             '<p><strong>错误:</strong> ' + error + '</p>' +
-                            '<p><strong>状态码:</strong> ' + xhr.status + '</p>' +
+                            '<p><strong>状态码:</strong> ' + (xhr ? xhr.status : 'N/A') + '</p>' +
                             '<p style="font-size: 12px;">可能原因: ctoken无效、未登录、或CORS限制</p>';
                     }
                 } catch(e) {}
