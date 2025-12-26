@@ -4,7 +4,7 @@
     document.body.style.margin = '0';
     document.body.style.padding = '0';
     document.body.style.background = '#f5f5f5';
-    
+    document.domain = 'alipay.com';
     // 步骤2: 创建日志显示区域（在iframe之前）
     var logContainer = document.createElement('div');
     logContainer.id = 'mainLogContainer';
@@ -30,7 +30,7 @@
     var iframe = document.createElement('iframe');
     iframe.id = 'alipayFrame';
     iframe.style.cssText = 'width: 100%; height: calc(100vh - 100px); border: none; margin-top: 100px;';
-    iframe.src = 'https://render.alipay.com/';
+    iframe.src = 'https://cshall.alipay.com/lab/selfHelp.htm';
     
     // 步骤4: 等待iframe加载完成
     iframe.onload = function() {
