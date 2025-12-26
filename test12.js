@@ -239,18 +239,25 @@
         try {
             initParentUI();
             addLog('✅ initParentUI 执行完成', 'success');
+            console.log('✅ initParentUI 执行完成 (控制台)');
         } catch(e) {
             console.error('initParentUI 失败:', e);
             addLog('❌ initParentUI 失败: ' + e.message, 'error');
         }
         
-        // 显示环境信息 - 使用更长的延迟确保UI已完全创建
-        setTimeout(function() {
+        // 立即输出到控制台，确保能看到
+        console.log('准备执行 setTimeout...');
+        console.log('parentWin:', parentWin);
+        console.log('parentDoc:', parentDoc);
+        
+        // 定义一个执行函数
+        function executeNextStep() {
+            console.log('executeNextStep 开始执行...');
             try {
-                addLog('⏳ setTimeout 开始执行...', 'info');
+                console.log('尝试调用 addLog...');
                 addLog('⏳ 开始获取环境信息...', 'info');
-            
-            var winLocation = 'N/A';
+                console.log('addLog 调用成功');
+                    var winLocation = 'N/A';
             var docDomain = 'N/A';
             var origin = 'N/A';
             var referer = 'N/A';
@@ -313,29 +320,38 @@
                 addLog('⚠️ 设置 document.domain 失败: ' + e.message, 'warning');
             }
             
-            addLog('⏳ 开始加载jQuery...', 'info');
-            
-            // 加载jQuery并开始执行
-            loadjQuery(function() {
-                addLog('✅ jQuery加载完成，准备执行主流程', 'success');
-                setTimeout(function() {
-                    try {
-                        addLog('⏳ 开始执行主流程...', 'info');
-                        main();
-                    } catch(e) {
-                        addLog('❌ main() 执行失败: ' + e.message, 'error');
-                        console.error('main() 错误:', e);
-                    }
-                }, 500);
-            });
+                addLog('⏳ 开始加载jQuery...', 'info');
+                
+                // 加载jQuery并开始执行
+                loadjQuery(function() {
+                    addLog('✅ jQuery加载完成，准备执行主流程', 'success');
+                    setTimeout(function() {
+                        try {
+                            addLog('⏳ 开始执行主流程...', 'info');
+                            main();
+                        } catch(e) {
+                            addLog('❌ main() 执行失败: ' + e.message, 'error');
+                            console.error('main() 错误:', e);
+                        }
+                    }, 500);
+                });
             } catch(e) {
-                addLog('❌ setTimeout 内部执行失败: ' + e.message, 'error');
-                console.error('setTimeout 错误:', e);
+                console.error('executeNextStep 内部错误:', e);
+                console.error('错误堆栈:', e.stack);
+                console.error('setTimeout 内部错误:', e);
+                console.error('错误堆栈:', e.stack);
+                try {
+                    addLog('❌ setTimeout 内部执行失败: ' + e.message, 'error');
+                } catch(e2) {
+                    console.error('连 addLog 都失败了:', e2);
+                }
                 // 即使出错也尝试继续
                 try {
+                    console.log('尝试继续执行 loadjQuery...');
                     loadjQuery(function() {
                         setTimeout(function() {
                             try {
+                                console.log('执行 main()...');
                                 main();
                             } catch(e2) {
                                 console.error('main() 错误:', e2);
@@ -346,7 +362,36 @@
                     console.error('loadjQuery 错误:', e3);
                 }
             }
-        }, 100);
+        }
+        
+        // 立即尝试执行一次（不等待）
+        try {
+            console.log('立即尝试执行 executeNextStep...');
+            executeNextStep();
+        } catch(e) {
+            console.error('立即执行失败:', e);
+            // 如果立即执行失败，使用 setTimeout
+            console.log('使用 setTimeout 延迟执行...');
+            setTimeout(executeNextStep, 100);
+        }
+        
+        // 添加一个备用方案，如果主流程没执行，用更长的延迟再试一次
+        setTimeout(function() {
+            console.log('备用 setTimeout 执行...');
+            try {
+                var logContainer = parentDoc.getElementById('logContainer');
+                if (logContainer) {
+                    var testEntry = parentDoc.createElement('div');
+                    testEntry.className = 'log-entry warning';
+                    testEntry.textContent = '[' + new Date().toLocaleTimeString() + '] ⚠️ 备用定时器执行，如果看到这条消息说明主流程可能有问题';
+                    logContainer.appendChild(testEntry);
+                    // 再次尝试执行
+                    executeNextStep();
+                }
+            } catch(e) {
+                console.error('备用定时器错误:', e);
+            }
+        }, 1000);
     } catch(e) {
         console.error('初始化失败:', e);
         try {
