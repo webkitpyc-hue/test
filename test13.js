@@ -211,23 +211,75 @@
     
     // 加载jQuery到父窗口
     function loadjQuery(callback) {
+        // 先检查是否已经存在
         if (typeof parentWin.jQuery !== 'undefined') {
             addLog('父窗口jQuery已存在', 'success');
+            console.log('jQuery已存在，版本:', parentWin.jQuery.fn.jquery);
             if (callback) callback();
             return;
         }
         
         addLog('开始加载jQuery到父窗口...', 'info');
+        console.log('开始加载jQuery...');
+        
+        // 创建script标签
         var jqueryScript = parentDoc.createElement('script');
         jqueryScript.src = 'https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js';
+        
+        // 使用onload和onerror
         jqueryScript.onload = function() {
-            addLog('jQuery加载成功', 'success');
-            if (callback) callback();
+            console.log('jQuery onload 事件触发');
+            addLog('jQuery onload 事件触发', 'info');
+            // 再次检查确保jQuery真的加载了
+            if (typeof parentWin.jQuery !== 'undefined') {
+                addLog('jQuery加载成功，版本: ' + parentWin.jQuery.fn.jquery, 'success');
+                console.log('jQuery加载成功，版本:', parentWin.jQuery.fn.jquery);
+                if (callback) callback();
+            } else {
+                console.warn('onload触发但jQuery仍未定义，开始轮询检查...');
+                pollForjQuery(callback);
+            }
         };
+        
         jqueryScript.onerror = function() {
-            addLog('jQuery加载失败', 'error');
+            console.error('jQuery加载失败 (onerror)');
+            addLog('jQuery加载失败 (onerror)', 'error');
+            // 即使onerror，也尝试轮询检查（可能已经加载了）
+            pollForjQuery(callback);
         };
+        
+        // 添加到head
         parentDoc.head.appendChild(jqueryScript);
+        console.log('jQuery script标签已添加到head');
+        
+        // 同时启动轮询检查（作为备用方案）
+        pollForjQuery(callback);
+    }
+    
+    // 轮询检查jQuery是否加载完成
+    function pollForjQuery(callback, attempts) {
+        attempts = attempts || 0;
+        var maxAttempts = 50; // 最多检查5秒（50次 * 100ms）
+        
+        console.log('轮询检查jQuery，尝试次数:', attempts);
+        
+        if (typeof parentWin.jQuery !== 'undefined') {
+            addLog('jQuery加载成功（通过轮询检测），版本: ' + parentWin.jQuery.fn.jquery, 'success');
+            console.log('jQuery加载成功（通过轮询检测），版本:', parentWin.jQuery.fn.jquery);
+            if (callback) callback();
+            return;
+        }
+        
+        if (attempts >= maxAttempts) {
+            addLog('jQuery加载超时，已尝试 ' + maxAttempts + ' 次', 'error');
+            console.error('jQuery加载超时');
+            return;
+        }
+        
+        // 100ms后再次检查
+        setTimeout(function() {
+            pollForjQuery(callback, attempts + 1);
+        }, 100);
     }
     
     // 初始化
